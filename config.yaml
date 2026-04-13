@@ -1,0 +1,36 @@
+project:
+  name: "skygrid-auto-editor"
+  version: "0.1.0"
+
+paths:
+  input: "./input"
+  output: "./output"
+  plugins: "./plugins"
+
+pipeline:
+  max_duration: 120          # Maximum output duration in seconds
+  min_clip_score: 30         # Minimum composite score to include a clip (0–100)
+  sort_by: "score"           # How to order clips: "score", "chronological", "random"
+  enabled_analyzers:
+    - "shake_detector"
+    - "scene_detector"
+    - "audio_analyzer"
+
+transitions:
+  style: "crossfade"         # Options: "cut", "crossfade", "fade_black"
+  duration: 0.5              # Transition duration in seconds
+
+audio:
+  music_track: null           # Path to background music file (null = no music)
+  sync_to_beat: false         # Align cuts to musical beats
+  original_audio_volume: 0.7  # Volume of original clip audio (0.0–1.0)
+  music_volume: 0.3           # Volume of background music (0.0–1.0)
+
+export:
+  resolution: "1920x1080"
+  fps: 30
+  codec: "libx264"
+  bitrate: "8M"
+  audio_codec: "aac"
+  audio_bitrate: "192k"
+  preset: "medium"            # FFmpeg preset: ultrafast, fast, medium, slow, veryslow
