@@ -15,6 +15,7 @@ from src.config import Config
 from src.export.renderer import render
 from src.ingest.loader import load_clips
 from src.models.clip import Clip
+from src.models.output_profile import OutputProfile
 
 logger = logging.getLogger(__name__)
 
@@ -25,46 +26,49 @@ _BUILTIN_ANALYZER_PKG = "src.analyzers"
 # Public API
 # ------------------------------------------------------------------
 
-def run(config: Config, output_path: Path | None = None) -> Path:
+def run(
+    config: Config,
+    output_path: Path | None = None,
+    profile: OutputProfile | None = None,
+) -> Path:
     """Execute the full edit pipeline end-to-end.
-
-    Steps:
-        1. Ingest clips from the configured input directory.
-        2. Discover and instantiate enabled analyzers (built-in + plugins).
-        3. Run each analyzer over every clip.
-        4. Filter and sort clips by composite score.
-        5. Assemble the timeline with transitions.
-        6. Render the final output (optionally mixing in music).
 
     Args:
         config: Validated pipeline configuration.
         output_path: Override for the final output file path.
+        profile: Output profile override.
 
     Returns:
         Path to the rendered video file.
     """
-    # 1–4. Analyze and select.
-    accepted = analyze_and_rank(config)
+    target = profile or config.output_profile
+
+    # 1–4. Analyze, filter, sort (with orientation-aware loading).
+    accepted = analyze_and_rank(config, profile=target)
 
     # 5. Assemble.
-    assembled_path = assemble(accepted, config)
+    assembled_path = assemble(accepted, config, profile=target)
 
     # 6. Render.
     final_path = output_path or (config.output_dir / "final.mp4")
-    return render(assembled_path, final_path, config)
+    return render(assembled_path, final_path, config, profile=target)
 
 
-def analyze_only(config: Config) -> list[Clip]:
+def analyze_only(
+    config: Config,
+    profile: OutputProfile | None = None,
+) -> list[Clip]:
     """Run ingestion and analysis without assembling or rendering.
 
     Args:
         config: Validated pipeline configuration.
+        profile: Output profile for orientation-aware sorting.
 
     Returns:
-        All clips with analysis scores and tags attached, sorted by
-        composite score descending.
+        All clips with scores and tags, sorted by composite score descending.
     """
-    clips = load_clips(config.input_dir)
+    target = profile or config.output_profile
+    clips = load_clips(config.input_dir, target_profile=target)
     if not clips:
         raise RuntimeError(f"No video clips found in {config.input_dir}")
 
@@ -75,11 +79,15 @@ def analyze_only(config: Config) -> list[Clip]:
     return sorted(analyzed, key=lambda c: c.composite_score, reverse=True)
 
 
-def analyze_and_rank(config: Config) -> list[Clip]:
+def analyze_and_rank(
+    config: Config,
+    profile: OutputProfile | None = None,
+) -> list[Clip]:
     """Analyze, filter, and sort clips — ready for assembly.
 
     Args:
         config: Validated pipeline configuration.
+        profile: Output profile for orientation-aware sorting.
 
     Returns:
         Accepted clips in assembly order.
@@ -87,7 +95,7 @@ def analyze_and_rank(config: Config) -> list[Clip]:
     Raises:
         RuntimeError: If no clips survive filtering.
     """
-    analyzed = analyze_only(config)
+    analyzed = analyze_only(config, profile=profile)
 
     accepted = [c for c in analyzed if c.composite_score >= config.min_clip_score]
     logger.info(
@@ -111,13 +119,6 @@ def analyze_and_rank(config: Config) -> list[Clip]:
 def discover_analyzers(config: Config) -> list[BaseAnalyzer]:
     """Find and instantiate all enabled analyzers from built-ins and plugins.
 
-    Discovery order:
-        1. Built-in analyzers in ``src/analyzers/``.
-        2. Plugin analyzers in the configured ``plugins/`` directory.
-
-    Only analyzers whose ``name`` appears in ``config.enabled_analyzers``
-    are returned.
-
     Args:
         config: Pipeline configuration.
 
@@ -126,7 +127,6 @@ def discover_analyzers(config: Config) -> list[BaseAnalyzer]:
     """
     registry: dict[str, BaseAnalyzer] = {}
 
-    # Built-in modules.
     builtin_dir = Path(__file__).resolve().parent / "analyzers"
     for py_file in sorted(builtin_dir.glob("*.py")):
         if py_file.name.startswith("_") or py_file.name == "base.py":
@@ -134,7 +134,6 @@ def discover_analyzers(config: Config) -> list[BaseAnalyzer]:
         module_name = f"{_BUILTIN_ANALYZER_PKG}.{py_file.stem}"
         _register_from_module(module_name, registry)
 
-    # Plugin modules.
     plugins_dir = config.plugins_dir
     if plugins_dir.exists():
         for py_file in sorted(plugins_dir.glob("*.py")):
@@ -173,15 +172,7 @@ def _run_analyzers(
     clips: list[Clip],
     analyzers: list[BaseAnalyzer],
 ) -> list[Clip]:
-    """Run every analyzer on every clip, collecting results.
-
-    Args:
-        clips: Raw clips from the loader.
-        analyzers: Instantiated analyzers to apply.
-
-    Returns:
-        Clips enriched with scores, metadata, and tags.
-    """
+    """Run every analyzer on every clip."""
     analyzed: list[Clip] = []
     for clip in clips:
         for analyzer in analyzers:
@@ -200,7 +191,7 @@ def _register_from_module(
     module_name: str,
     registry: dict[str, BaseAnalyzer],
 ) -> None:
-    """Import *module_name* and register any concrete BaseAnalyzer subclasses."""
+    """Import *module_name* and register concrete BaseAnalyzer subclasses."""
     try:
         module = importlib.import_module(module_name)
     except Exception:
@@ -225,15 +216,7 @@ def _is_analyzer_class(obj: object) -> bool:
 
 
 def _sort_clips(clips: list[Clip], strategy: str) -> list[Clip]:
-    """Sort clips according to the named strategy.
-
-    Args:
-        clips: Clips to sort.
-        strategy: ``"score"``, ``"chronological"``, or ``"random"``.
-
-    Returns:
-        Sorted (or shuffled) list of clips.
-    """
+    """Sort clips according to the named strategy."""
     match strategy:
         case "score":
             return sorted(clips, key=lambda c: c.composite_score, reverse=True)

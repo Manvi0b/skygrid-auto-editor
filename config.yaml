@@ -1,6 +1,6 @@
 project:
   name: "skygrid-auto-editor"
-  version: "0.1.0"
+  version: "0.2.0"
 
 paths:
   input: "./input"
@@ -26,11 +26,67 @@ audio:
   original_audio_volume: 0.7  # Volume of original clip audio (0.0–1.0)
   music_volume: 0.3           # Volume of background music (0.0–1.0)
 
-export:
-  resolution: "1920x1080"
-  fps: 30
-  codec: "libx264"
-  bitrate: "8M"
-  audio_codec: "aac"
-  audio_bitrate: "192k"
-  preset: "medium"            # FFmpeg preset: ultrafast, fast, medium, slow, veryslow
+# ---------------------------------------------------------------------------
+# Source profiles — describe capture devices and their known characteristics.
+# Built-in profiles: dji_mini3pro, dji_mini4pro, dji_air3, dji_mavic3,
+#   osmo_pocket3, osmo_action5, gopro_hero12, generic
+# You can override or add new ones here.
+# ---------------------------------------------------------------------------
+source_profiles:
+  dji_mini3pro:
+    device_type: drone
+    default_orientation: horizontal
+    has_gimbal: true
+    typical_artifacts: [prop_shadow, jello]
+  osmo_pocket3:
+    device_type: gimbal
+    default_orientation: mixed
+    has_gimbal: true
+    typical_artifacts: []
+
+# ---------------------------------------------------------------------------
+# Output profiles — target platform formats.
+# Built-in profiles: youtube, youtube_4k, reels, tiktok, instagram_square, twitter
+# You can override or add new ones here.
+# ---------------------------------------------------------------------------
+output_profiles:
+  youtube:
+    aspect_ratio: [16, 9]
+    resolution: [1920, 1080]
+    fps: 30
+    codec: libx264
+    bitrate: 20M
+    platform_tags: [youtube, web]
+    aspect_ratio_mode: blur_bars
+  reels:
+    aspect_ratio: [9, 16]
+    resolution: [1080, 1920]
+    fps: 30
+    codec: libx264
+    bitrate: 15M
+    platform_tags: [instagram, reels, mobile]
+    aspect_ratio_mode: blur_bars
+  tiktok:
+    aspect_ratio: [9, 16]
+    resolution: [1080, 1920]
+    fps: 30
+    codec: libx264
+    bitrate: 15M
+    platform_tags: [tiktok, mobile]
+    aspect_ratio_mode: blur_bars
+  instagram_square:
+    aspect_ratio: [1, 1]
+    resolution: [1080, 1080]
+    fps: 30
+    codec: libx264
+    bitrate: 12M
+    platform_tags: [instagram, square]
+    aspect_ratio_mode: blur_bars
+
+# Which profile to use by default (overridden by --profile on the CLI).
+default_output_profile: youtube
+
+# How to handle clips whose aspect ratio doesn't match the output profile.
+# Options: "crop" (centre-crop to fill), "blur_bars" (blurred background fill),
+#          "letterbox" (black bars).
+aspect_ratio_mode: blur_bars

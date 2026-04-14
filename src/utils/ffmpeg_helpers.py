@@ -13,20 +13,22 @@ logger = logging.getLogger(__name__)
 
 
 def probe_video_info(video_path: Path) -> dict[str, Any]:
-    """Return duration, resolution, and fps for a video file via ffprobe.
+    """Return duration, resolution, fps, and format tags for a video file.
 
     Args:
         video_path: Path to the video file.
 
     Returns:
-        Dict with keys ``duration`` (float, seconds), ``width`` (int),
-        ``height`` (int), ``fps`` (float).  Missing values default to 0.
+        Dict with keys ``duration`` (float), ``width`` (int), ``height`` (int),
+        ``fps`` (float), and ``format_tags`` (dict of container-level tags
+        such as ``make``, ``model``, ``encoder``).
     """
     info: dict[str, Any] = {
         "duration": 0.0,
         "width": 0,
         "height": 0,
         "fps": 0.0,
+        "format_tags": {},
     }
     try:
         result = subprocess.run(
@@ -47,13 +49,16 @@ def probe_video_info(video_path: Path) -> dict[str, Any]:
         # Duration from format container.
         fmt = data.get("format", {})
         info["duration"] = float(fmt.get("duration", 0))
+        info["format_tags"] = {
+            k.lower(): v
+            for k, v in fmt.get("tags", {}).items()
+        }
 
         # Resolution and fps from the first video stream.
         for stream in data.get("streams", []):
             if stream.get("codec_type") == "video":
                 info["width"] = int(stream.get("width", 0))
                 info["height"] = int(stream.get("height", 0))
-                # r_frame_rate is typically "30/1" or "30000/1001".
                 rfr = stream.get("r_frame_rate", "0/1")
                 num, den = rfr.split("/")
                 info["fps"] = round(int(num) / max(int(den), 1), 3)
@@ -145,3 +150,63 @@ def has_audio_stream(video_path: Path) -> bool:
         return len(data.get("streams", [])) > 0
     except Exception:
         return False
+
+
+def detect_orientation(width: int, height: int) -> str:
+    """Classify frame orientation from pixel dimensions.
+
+    Args:
+        width: Frame width in pixels.
+        height: Frame height in pixels.
+
+    Returns:
+        ``"horizontal"``, ``"vertical"``, or ``"square"``.
+    """
+    if width > height:
+        return "horizontal"
+    elif height > width:
+        return "vertical"
+    return "square"
+
+
+def detect_source_from_tags(format_tags: dict[str, str]) -> str | None:
+    """Attempt to identify the capture device from container metadata tags.
+
+    DJI cameras embed ``make`` / ``model`` or ``com.apple.quicktime.model``
+    in the MP4 container.  This function maps known values to source profile
+    names.
+
+    Args:
+        format_tags: Lowered-key dict of format-level tags from ffprobe.
+
+    Returns:
+        A source-profile name string, or None if unrecognised.
+    """
+    # Combine all tag values into a single search string.
+    blob = " ".join(format_tags.values()).lower()
+
+    _DEVICE_PATTERNS: list[tuple[str, str]] = [
+        ("mini 3 pro", "dji_mini3pro"),
+        ("mini 4 pro", "dji_mini4pro"),
+        ("mini3pro", "dji_mini3pro"),
+        ("mini4pro", "dji_mini4pro"),
+        ("air 3", "dji_air3"),
+        ("air3", "dji_air3"),
+        ("mavic 3", "dji_mavic3"),
+        ("mavic3", "dji_mavic3"),
+        ("osmo pocket 3", "osmo_pocket3"),
+        ("pocket3", "osmo_pocket3"),
+        ("osmo action", "osmo_action5"),
+        ("hero12", "gopro_hero12"),
+        ("hero 12", "gopro_hero12"),
+    ]
+
+    for pattern, profile_name in _DEVICE_PATTERNS:
+        if pattern in blob:
+            return profile_name
+
+    # Fallback: if "dji" is anywhere, mark as generic DJI drone.
+    if "dji" in blob:
+        return "dji_mini3pro"  # safe default with gimbal=True
+
+    return None

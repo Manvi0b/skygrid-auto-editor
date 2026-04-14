@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 
 from src.config import Config
+from src.models.output_profile import OutputProfile
 
 logger = logging.getLogger(__name__)
 
@@ -15,16 +16,18 @@ def render(
     assembled_path: Path,
     output_path: Path,
     config: Config,
+    profile: OutputProfile | None = None,
 ) -> Path:
-    """Re-encode *assembled_path* to the final output with configured settings.
+    """Re-encode *assembled_path* to the final output using the output profile.
 
-    Optionally mixes in a background music track at the configured volume
-    levels.
+    Applies the profile's resolution, codec, bitrate, and fps.  Optionally
+    mixes in a background music track at the configured volume levels.
 
     Args:
         assembled_path: Path to the intermediate assembled video.
         output_path: Desired path for the final rendered file.
         config: Pipeline configuration.
+        profile: Output profile override.  Falls back to ``config.output_profile``.
 
     Returns:
         Path to the rendered output file.
@@ -32,17 +35,20 @@ def render(
     Raises:
         RuntimeError: If ffmpeg encoding fails.
     """
-    width, height = config.resolution.split("x")
+    target = profile or config.output_profile
+    tgt_w, tgt_h = target.width, target.height
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Build the ffmpeg command.
     inputs = ["-y", "-i", str(assembled_path)]
     filter_parts: list[str] = []
 
-    # Video scaling / padding.
+    # Video scaling / padding (safety pass — assembler already adapts,
+    # but this ensures exact pixel dimensions in the final file).
     vf = (
-        f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
-        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2"
+        f"scale={tgt_w}:{tgt_h}:force_original_aspect_ratio=decrease,"
+        f"pad={tgt_w}:{tgt_h}:(ow-iw)/2:(oh-ih)/2"
     )
 
     has_music = config.music_track is not None and config.music_track.exists()
@@ -51,7 +57,6 @@ def render(
         inputs.extend(["-i", str(config.music_track)])
         orig_vol = config.original_audio_volume
         music_vol = config.music_volume
-        # Mix original audio (stream 0:a) with music (stream 1:a).
         filter_parts.append(
             f"[0:a]volume={orig_vol}[a0];"
             f"[1:a]volume={music_vol}[a1];"
@@ -64,7 +69,6 @@ def render(
     cmd: list[str] = ["ffmpeg", *inputs]
 
     if filter_parts:
-        # Combine video and audio filters.
         full_filter = f"[0:v]{vf}[vout];{';'.join(filter_parts)}"
         cmd.extend(["-filter_complex", full_filter])
         cmd.extend(["-map", "[vout]"])
@@ -73,17 +77,20 @@ def render(
         cmd.extend(["-vf", vf])
 
     cmd.extend([
-        "-r", str(config.fps),
-        "-c:v", config.codec,
-        "-b:v", config.bitrate,
-        "-preset", config.preset,
-        "-c:a", config.audio_codec,
-        "-b:a", config.audio_bitrate,
+        "-r", str(target.fps),
+        "-c:v", target.codec,
+        "-b:v", target.bitrate,
+        "-preset", target.preset,
+        "-c:a", target.audio_codec,
+        "-b:a", target.audio_bitrate,
         "-movflags", "+faststart",
         str(output_path),
     ])
 
-    logger.info("Rendering final output → %s", output_path)
+    logger.info(
+        "Rendering final output → %s  [%s  %dx%d  %s  %s]",
+        output_path, target.name, tgt_w, tgt_h, target.codec, target.bitrate,
+    )
     logger.debug("ffmpeg command: %s", " ".join(cmd))
 
     try:

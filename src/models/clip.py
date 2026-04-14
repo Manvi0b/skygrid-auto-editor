@@ -17,9 +17,13 @@ class Clip:
         width: Frame width in pixels.
         height: Frame height in pixels.
         fps: Frames per second of the source video.
+        orientation: Frame orientation — ``"horizontal"``, ``"vertical"``,
+            or ``"square"``.  Auto-detected from width/height.
+        source_profile: Name of the detected or manually assigned source
+            profile (e.g. ``"dji_mini3pro"``), or None if unknown.
         scores: Mapping of analyzer name to quality score (0–100).
         metadata: Arbitrary key-value metadata attached by analyzers.
-        tags: Categorical labels assigned during analysis (e.g. "shaky", "loud").
+        tags: Categorical labels assigned during analysis.
     """
 
     path: Path
@@ -27,6 +31,8 @@ class Clip:
     width: int = 0
     height: int = 0
     fps: float = 0.0
+    orientation: str = "horizontal"
+    source_profile: str | None = None
     scores: dict[str, float] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
     tags: list[str] = field(default_factory=list)
@@ -43,6 +49,27 @@ class Clip:
             return 0.0
         return sum(self.scores.values()) / len(self.scores)
 
+    # ------------------------------------------------------------------
+    # Immutable update helpers
+    # ------------------------------------------------------------------
+
+    def _replace(self, **kwargs: Any) -> Clip:
+        """Return a copy with the specified fields overridden."""
+        defaults = {
+            "path": self.path,
+            "duration": self.duration,
+            "width": self.width,
+            "height": self.height,
+            "fps": self.fps,
+            "orientation": self.orientation,
+            "source_profile": self.source_profile,
+            "scores": self.scores,
+            "metadata": self.metadata,
+            "tags": list(self.tags),
+        }
+        defaults.update(kwargs)
+        return Clip(**defaults)
+
     def with_score(self, analyzer: str, score: float) -> Clip:
         """Return a new Clip with an additional or updated score.
 
@@ -53,17 +80,7 @@ class Clip:
         Returns:
             A new Clip instance with the updated scores dict.
         """
-        new_scores = {**self.scores, analyzer: score}
-        return Clip(
-            path=self.path,
-            duration=self.duration,
-            width=self.width,
-            height=self.height,
-            fps=self.fps,
-            scores=new_scores,
-            metadata=self.metadata,
-            tags=list(self.tags),
-        )
+        return self._replace(scores={**self.scores, analyzer: score})
 
     def with_metadata(self, key: str, value: Any) -> Clip:
         """Return a new Clip with an additional metadata entry.
@@ -75,17 +92,7 @@ class Clip:
         Returns:
             A new Clip instance with the updated metadata dict.
         """
-        new_metadata = {**self.metadata, key: value}
-        return Clip(
-            path=self.path,
-            duration=self.duration,
-            width=self.width,
-            height=self.height,
-            fps=self.fps,
-            scores=self.scores,
-            metadata=new_metadata,
-            tags=list(self.tags),
-        )
+        return self._replace(metadata={**self.metadata, key: value})
 
     def with_tag(self, tag: str) -> Clip:
         """Return a new Clip with an additional tag.
@@ -98,13 +105,15 @@ class Clip:
         """
         if tag in self.tags:
             return self
-        return Clip(
-            path=self.path,
-            duration=self.duration,
-            width=self.width,
-            height=self.height,
-            fps=self.fps,
-            scores=self.scores,
-            metadata=self.metadata,
-            tags=[*self.tags, tag],
-        )
+        return self._replace(tags=[*self.tags, tag])
+
+    def with_source_profile(self, profile_name: str) -> Clip:
+        """Return a new Clip with the source profile set.
+
+        Args:
+            profile_name: Name of the source profile.
+
+        Returns:
+            A new Clip with ``source_profile`` updated.
+        """
+        return self._replace(source_profile=profile_name)
