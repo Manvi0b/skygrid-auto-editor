@@ -20,6 +20,7 @@ from src.ingest.manifest import write_project_manifest
 from src.models.clip import Clip
 from src.models.edl import EDL
 from src.models.output_profile import OutputProfile
+from src.qc.preview import generate_contact_sheet
 from src.sequencer.beat_sequencer import build_edl
 
 logger = logging.getLogger(__name__)
@@ -83,6 +84,13 @@ def run(
             logger.exception("Failed to persist EDL — continuing")
 
         logger.info("\n%s", edl.summary())
+
+        # QC contact sheet — cheap preview of cut order before the heavy encode.
+        try:
+            generate_contact_sheet(edl, config.output_dir / "contact_sheet.png")
+        except Exception:
+            logger.exception("Contact-sheet generation failed — continuing")
+
         assembled_path = assemble_from_edl(edl, config, profile=target)
     else:
         # 5. Assemble (legacy path).

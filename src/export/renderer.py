@@ -6,6 +6,7 @@ import logging
 import subprocess
 from pathlib import Path
 
+from src.color.mood import mood_filter
 from src.config import Config
 from src.models.output_profile import OutputProfile
 
@@ -50,6 +51,12 @@ def render(
         f"scale={tgt_w}:{tgt_h}:force_original_aspect_ratio=decrease,"
         f"pad={tgt_w}:{tgt_h}:(ow-iw)/2:(oh-ih)/2"
     )
+
+    # Mood colour grade — appended so the final file has a consistent look.
+    color_chain = mood_filter(getattr(config, "mood", "neutral"))
+    if color_chain:
+        vf = f"{vf},{color_chain}"
+        logger.info("Applying mood grade: %s", config.mood)
 
     has_music = config.music_track is not None and config.music_track.exists()
 
