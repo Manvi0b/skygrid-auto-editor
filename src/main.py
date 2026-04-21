@@ -63,19 +63,38 @@ def cli(ctx: click.Context, config_path: Path | None, verbose: bool) -> None:
     default=None,
     help="Output profile: youtube, reels, tiktok, instagram_square, twitter, youtube_4k.",
 )
+@click.option("--music", "music_track", type=click.Path(exists=True, path_type=Path), default=None,
+              help="Path to a music track — enables beat-aligned sequencing.")
+@click.option("--target-length", "target_length", type=float, default=None,
+              help="Target edit length in seconds (overrides max_duration).")
+@click.option("--pacing", type=click.Choice(["slow", "medium", "fast", "cinematic", "energetic"]),
+              default=None, help="Cut rhythm: slow / medium / fast / cinematic / energetic.")
+@click.option("--mood", type=click.Choice(["luxury", "energetic", "moody", "bright", "dramatic", "neutral"]),
+              default=None, help="Mood preset (drives colour and pacing bias).")
+@click.option("--no-beats", is_flag=True, default=False,
+              help="Disable beat-aligned sequencing even if music is set.")
 @click.pass_context
 def edit(
     ctx: click.Context,
     input_dir: Path | None,
     output_file: Path | None,
     profile_name: str | None,
+    music_track: Path | None,
+    target_length: float | None,
+    pacing: str | None,
+    mood: str | None,
+    no_beats: bool,
 ) -> None:
-    """Run the full editing pipeline: analyze → rank → assemble → render."""
+    """Run the full editing pipeline: analyze → rank → sequence → render."""
     config: Config = ctx.obj["config"]
     if input_dir:
         config = _override_input(config, input_dir)
     if profile_name:
         config = resolve_output_profile(config, profile_name)
+    config = _apply_edit_overrides(
+        config, music_track=music_track, target_length=target_length,
+        pacing=pacing, mood=mood, no_beats=no_beats,
+    )
 
     click.echo(
         f"Profile: {config.output_profile.name}  "
@@ -217,6 +236,57 @@ def list_profiles() -> None:
 # Helpers
 # ------------------------------------------------------------------
 
+def _apply_edit_overrides(
+    config: Config,
+    music_track: Path | None,
+    target_length: float | None,
+    pacing: str | None,
+    mood: str | None,
+    no_beats: bool,
+) -> Config:
+    """Return a new Config with CLI edit-time overrides merged in."""
+    from dataclasses import replace
+    # dataclass is frozen with slots — use manual reconstruction via _override_input pattern.
+    cfg = config
+    if music_track is not None:
+        cfg = _clone_with(cfg, music_track=music_track)
+    if target_length is not None:
+        cfg = _clone_with(cfg, target_length=float(target_length))
+    if pacing is not None:
+        cfg = _clone_with(cfg, pacing=pacing)
+    if mood is not None:
+        cfg = _clone_with(cfg, mood=mood)
+    if no_beats:
+        cfg = _clone_with(cfg, beat_aligned=False)
+    return cfg
+
+
+def _clone_with(config: Config, **overrides) -> Config:
+    """Return a new Config with the given fields overridden."""
+    base = dict(
+        input_dir=config.input_dir, output_dir=config.output_dir,
+        plugins_dir=config.plugins_dir, max_duration=config.max_duration,
+        min_clip_score=config.min_clip_score, sort_by=config.sort_by,
+        enabled_analyzers=config.enabled_analyzers,
+        transition_style=config.transition_style,
+        transition_duration=config.transition_duration,
+        music_track=config.music_track, sync_to_beat=config.sync_to_beat,
+        original_audio_volume=config.original_audio_volume,
+        music_volume=config.music_volume, resolution=config.resolution,
+        fps=config.fps, codec=config.codec, bitrate=config.bitrate,
+        audio_codec=config.audio_codec, audio_bitrate=config.audio_bitrate,
+        preset=config.preset, output_profile=config.output_profile,
+        source_profiles=config.source_profiles,
+        aspect_ratio_mode=config.aspect_ratio_mode,
+        target_length=config.target_length, pacing=config.pacing,
+        mood=config.mood, property_type=config.property_type,
+        hero_clips=config.hero_clips, must_include=config.must_include,
+        beat_aligned=config.beat_aligned, project_name=config.project_name,
+    )
+    base.update(overrides)
+    return Config(**base)
+
+
 def _override_input(config: Config, input_dir: Path) -> Config:
     """Return a new Config with *input_dir* replaced."""
     return Config(
@@ -243,6 +313,14 @@ def _override_input(config: Config, input_dir: Path) -> Config:
         output_profile=config.output_profile,
         source_profiles=config.source_profiles,
         aspect_ratio_mode=config.aspect_ratio_mode,
+        target_length=config.target_length,
+        pacing=config.pacing,
+        mood=config.mood,
+        property_type=config.property_type,
+        hero_clips=config.hero_clips,
+        must_include=config.must_include,
+        beat_aligned=config.beat_aligned,
+        project_name=config.project_name,
     )
 
 

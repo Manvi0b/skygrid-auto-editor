@@ -11,11 +11,16 @@ from pathlib import Path
 
 from src.analyzers.base import BaseAnalyzer
 from src.assembler.editor import assemble
+from src.assembler.edl_assembler import assemble_from_edl
+from src.audio.music_sync import analyze_music
 from src.config import Config
 from src.export.renderer import render
 from src.ingest.loader import load_clips
+from src.ingest.manifest import write_project_manifest
 from src.models.clip import Clip
+from src.models.edl import EDL
 from src.models.output_profile import OutputProfile
+from src.sequencer.beat_sequencer import build_edl
 
 logger = logging.getLogger(__name__)
 
@@ -46,12 +51,78 @@ def run(
     # 1–4. Analyze, filter, sort (with orientation-aware loading).
     accepted = analyze_and_rank(config, profile=target)
 
-    # 5. Assemble.
-    assembled_path = assemble(accepted, config, profile=target)
+    # Persist a project manifest for inspection / downstream tools.
+    try:
+        write_project_manifest(accepted, config.output_dir, config.project_name)
+    except Exception:
+        logger.exception("Failed to write project manifest — continuing")
+
+    # Decide: beat-aligned (music-driven) or classic concat assembly.
+    use_beats = (
+        config.beat_aligned
+        and config.music_track is not None
+        and config.music_track.exists()
+    )
+
+    if use_beats:
+        target_len = config.target_length or config.max_duration
+        logger.info("Beat-aligned sequencing  target=%.1fs  pacing=%s  mood=%s",
+                    target_len, config.pacing, config.mood)
+        music_map = analyze_music(config.music_track)
+        edl = build_edl(
+            clips=accepted,
+            music_map=music_map,
+            target_duration=target_len,
+            pacing=config.pacing,
+            mood=config.mood,
+        )
+        # Persist EDL alongside the output.
+        try:
+            _write_edl_json(edl, config.output_dir / "edl.json")
+        except Exception:
+            logger.exception("Failed to persist EDL — continuing")
+
+        logger.info("\n%s", edl.summary())
+        assembled_path = assemble_from_edl(edl, config, profile=target)
+    else:
+        # 5. Assemble (legacy path).
+        assembled_path = assemble(accepted, config, profile=target)
 
     # 6. Render.
     final_path = output_path or (config.output_dir / "final.mp4")
     return render(assembled_path, final_path, config, profile=target)
+
+
+def _write_edl_json(edl: EDL, path: Path) -> None:
+    """Serialise an EDL to JSON (small helper kept here to avoid circular imports)."""
+    import json
+    payload = {
+        "target_duration": edl.target_duration,
+        "bpm": edl.bpm,
+        "mood": edl.mood,
+        "pacing": edl.pacing,
+        "entries": [
+            {
+                "source_path": str(e.source_path),
+                "source_in": round(e.source_in, 3),
+                "source_out": round(e.source_out, 3),
+                "timeline_in": round(e.timeline_in, 3),
+                "duration": round(e.duration, 3),
+                "transition_in": e.transition_in,
+                "transition_out": e.transition_out,
+                "beat_aligned": e.beat_aligned,
+                "shot_type": e.shot_type,
+                "movement": e.movement,
+                "score": round(e.score, 2),
+                "notes": e.notes,
+            }
+            for e in edl.entries
+        ],
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as fh:
+        json.dump(payload, fh, indent=2)
+    logger.info("EDL → %s", path)
 
 
 def analyze_only(

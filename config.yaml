@@ -1,6 +1,20 @@
 project:
   name: "skygrid-auto-editor"
-  version: "0.2.0"
+  version: "0.3.0"
+
+# ---------------------------------------------------------------------------
+# Music-driven edit parameters (v0.3.0).
+# When `audio.music_track` is set and `edit.beat_aligned` is true, the
+# pipeline uses the beat-aware sequencer instead of plain concatenation.
+# ---------------------------------------------------------------------------
+edit:
+  target_length: 0          # 0 = use pipeline.max_duration
+  pacing: medium            # slow | medium | fast | cinematic | energetic
+  mood: neutral             # luxury | energetic | moody | bright | dramatic | neutral
+  property_type: generic    # real_estate | event | commercial | landscape | generic
+  beat_aligned: true        # snap cuts to beats when music_track is set
+  hero_clips: []            # filenames that must appear in the edit
+  must_include: []          # segment descriptors to force in
 
 paths:
   input: "./input"

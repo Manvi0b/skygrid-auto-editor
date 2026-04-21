@@ -77,6 +77,16 @@ class Config:
     )
     aspect_ratio_mode: str = "blur_bars"
 
+    # --- v0.3.0 — music-driven editing ---
+    target_length: float = 0.0   # 0 = use max_duration; else overrides it
+    pacing: str = "medium"        # slow | medium | fast | cinematic | energetic
+    mood: str = "neutral"         # luxury | energetic | moody | bright | dramatic | neutral
+    property_type: str = "generic"  # real_estate | event | commercial | landscape | generic
+    hero_clips: list[str] = field(default_factory=list)     # must-include clip names
+    must_include: list[str] = field(default_factory=list)   # must-include segments
+    beat_aligned: bool = True     # when music_track is set, use beat-aligned sequencer
+    project_name: str = "skygrid_project"
+
 
 def load_config(path: Path | None = None) -> Config:
     """Load and validate a YAML configuration file.
@@ -138,6 +148,10 @@ def load_config(path: Path | None = None) -> Config:
         BUILTIN_OUTPUT_PROFILES["youtube"],
     )
 
+    project_cfg = raw.get("project", {})
+    edit_cfg = raw.get("edit", {})
+    branding_cfg = raw.get("branding", {})
+
     return Config(
         input_dir=Path(paths.get("input", "./input")),
         output_dir=Path(paths.get("output", "./output")),
@@ -162,6 +176,14 @@ def load_config(path: Path | None = None) -> Config:
         output_profile=active_profile,
         source_profiles=source_profiles,
         aspect_ratio_mode=str(raw.get("aspect_ratio_mode", active_profile.aspect_ratio_mode)),
+        target_length=float(edit_cfg.get("target_length", 0.0)),
+        pacing=str(edit_cfg.get("pacing", "medium")),
+        mood=str(edit_cfg.get("mood", "neutral")),
+        property_type=str(edit_cfg.get("property_type", "generic")),
+        hero_clips=list(edit_cfg.get("hero_clips", [])),
+        must_include=list(edit_cfg.get("must_include", [])),
+        beat_aligned=bool(edit_cfg.get("beat_aligned", True)),
+        project_name=str(project_cfg.get("name", "skygrid_project")),
     )
 
 
@@ -219,4 +241,12 @@ def resolve_output_profile(
         output_profile=profile,
         source_profiles=config.source_profiles,
         aspect_ratio_mode=profile.aspect_ratio_mode,
+        target_length=config.target_length,
+        pacing=config.pacing,
+        mood=config.mood,
+        property_type=config.property_type,
+        hero_clips=config.hero_clips,
+        must_include=config.must_include,
+        beat_aligned=config.beat_aligned,
+        project_name=config.project_name,
     )
