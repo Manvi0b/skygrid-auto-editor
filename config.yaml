@@ -102,6 +102,21 @@ output_profiles:
 # Which profile to use by default (overridden by --profile on the CLI).
 default_output_profile: youtube
 
+# ---------------------------------------------------------------------------
+# Multi-output batch (used by the `edit-multi` command).
+# Each entry can use `profile:` directly or `aspect:` shorthand.
+# Optional `mood:` overrides the global edit.mood for that file.
+# ---------------------------------------------------------------------------
+outputs: []
+# Example:
+# outputs:
+#   - {length: 60, aspect: "16:9"}
+#   - {length: 30, aspect: "9:16", mood: energetic}
+#   - {length: 15, profile: tiktok}
+
+branding:
+  client_name: ""
+
 # How to handle clips whose aspect ratio doesn't match the output profile.
 # Options: "crop" (centre-crop to fill), "blur_bars" (blurred background fill),
 #          "letterbox" (black bars).

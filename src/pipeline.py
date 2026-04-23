@@ -119,6 +119,197 @@ def run(
     return render(assembled_path, final_path, config, profile=target)
 
 
+# ------------------------------------------------------------------
+# Multi-output: analyze once, render many
+# ------------------------------------------------------------------
+
+# Aspect → default profile name (used when `outputs:` specs give aspect but no profile).
+_ASPECT_PROFILE_DEFAULTS: dict[str, str] = {
+    "16:9": "youtube",
+    "9:16": "reels",
+    "1:1": "instagram_square",
+    "4k": "youtube_4k",
+    "16:9@4k": "youtube_4k",
+}
+
+
+def run_all(
+    config: Config,
+    date_str: str | None = None,
+) -> list[Path]:
+    """Analyze clips once, then render every entry in ``config.outputs``.
+
+    Each output spec is a dict with:
+
+    * ``length`` (required) — target edit length in seconds.
+    * ``profile`` (optional) — output profile name.
+    * ``aspect`` (optional) — shorthand when no ``profile`` given;
+      looked up against :data:`_ASPECT_PROFILE_DEFAULTS`.
+    * ``mood`` (optional) — per-output mood override.
+
+    Files land under ``config.output_dir/config.project_name/`` with
+    the name ``{client_or_project}_{Ns}_{aspect}_{YYYYMMDD}.mp4``.
+
+    Args:
+        config: Validated pipeline configuration.
+        date_str: Override the date component of the filename
+            (``YYYYMMDD``).  Defaults to today.
+
+    Returns:
+        Paths of every rendered file, in output-spec order.
+
+    Raises:
+        RuntimeError: If ``config.outputs`` is empty.
+    """
+    from datetime import date as _date
+    from src.config import resolve_output_profile
+
+    if not config.outputs:
+        raise RuntimeError("config.outputs is empty — nothing to render")
+
+    # Expensive prep: analyze + rank once.
+    base_profile = config.output_profile
+    accepted = analyze_and_rank(config, profile=base_profile)
+
+    try:
+        write_project_manifest(accepted, config.output_dir, config.project_name)
+    except Exception:
+        logger.exception("Failed to write project manifest — continuing")
+
+    # Pre-compute segments + music map once; they're profile-independent.
+    segments = extract_segments(accepted)
+    if segments:
+        try:
+            write_segments_manifest(segments, config.output_dir)
+        except Exception:
+            logger.exception("Failed to write segments manifest — continuing")
+
+    music_map = None
+    if config.music_track is not None and config.music_track.exists():
+        music_map = analyze_music(config.music_track)
+
+    date_component = date_str or _date.today().strftime("%Y%m%d")
+    project_dir = config.output_dir / config.project_name
+    project_dir.mkdir(parents=True, exist_ok=True)
+
+    results: list[Path] = []
+    for i, spec in enumerate(config.outputs, 1):
+        length = float(spec.get("length", config.max_duration))
+        profile_name = spec.get("profile") or _profile_for_aspect(spec.get("aspect"))
+        if profile_name is None:
+            logger.warning("Output #%d: no profile/aspect — skipping", i)
+            continue
+        mood_override = spec.get("mood")
+
+        logger.info(
+            "—— Rendering output %d/%d — profile=%s  length=%.1fs  mood=%s",
+            i, len(config.outputs), profile_name, length, mood_override or config.mood,
+        )
+
+        per_cfg = resolve_output_profile(config, profile_name)
+        if mood_override:
+            per_cfg = _clone_with_mood(per_cfg, mood_override)
+        per_cfg = _clone_with_target_len(per_cfg, length)
+
+        aspect_tag = _aspect_tag(per_cfg.output_profile.aspect_ratio)
+        stem_name = config.client_name or config.project_name
+        filename = f"{_slug(stem_name)}_{int(length)}s_{aspect_tag}_{date_component}.mp4"
+        output_path = project_dir / filename
+
+        rendered = _render_one(per_cfg, accepted, segments, music_map, output_path)
+        results.append(rendered)
+
+    logger.info("Multi-output complete — %d file(s) written", len(results))
+    return results
+
+
+def _render_one(
+    config: Config,
+    accepted: list[Clip],
+    segments: list,
+    music_map,
+    output_path: Path,
+) -> Path:
+    """Render a single output using already-analyzed clips/segments."""
+    target = config.output_profile
+    use_beats = (
+        config.beat_aligned and music_map is not None
+    )
+    target_len = config.target_length or config.max_duration
+
+    if use_beats:
+        if segments:
+            edl = build_edl_from_segments(
+                segments=segments,
+                music_map=music_map,
+                target_duration=target_len,
+                pacing=config.pacing,
+                mood=config.mood,
+            )
+        else:
+            edl = build_edl(
+                clips=accepted,
+                music_map=music_map,
+                target_duration=target_len,
+                pacing=config.pacing,
+                mood=config.mood,
+            )
+        logger.info("\n%s", edl.summary())
+        assembled_path = assemble_from_edl(edl, config, profile=target)
+    else:
+        assembled_path = assemble(accepted, config, profile=target)
+
+    return render(assembled_path, output_path, config, profile=target)
+
+
+def _profile_for_aspect(aspect: str | None) -> str | None:
+    """Map an ``aspect`` shorthand to a built-in profile name."""
+    if not aspect:
+        return None
+    key = str(aspect).lower().strip()
+    return _ASPECT_PROFILE_DEFAULTS.get(key)
+
+
+def _aspect_tag(aspect_ratio: tuple[int, int]) -> str:
+    """Render an aspect tuple as a filename-safe tag (e.g. ``"16x9"``)."""
+    w, h = aspect_ratio
+    return f"{w}x{h}"
+
+
+def _slug(s: str) -> str:
+    """Filename-safe slug of *s*."""
+    out = []
+    for ch in s.strip():
+        if ch.isalnum():
+            out.append(ch)
+        elif ch in (" ", "-", "_", "."):
+            out.append("_")
+    return "".join(out).strip("_") or "output"
+
+
+def _clone_with_mood(config: Config, mood: str) -> Config:
+    """Return a copy of *config* with a new mood (without importing main.py)."""
+    return _reclone(config, mood=mood)
+
+
+def _clone_with_target_len(config: Config, target_length: float) -> Config:
+    """Return a copy of *config* with a new target length."""
+    return _reclone(config, target_length=target_length)
+
+
+def _reclone(config: Config, **overrides) -> Config:
+    """Minimal in-module Config cloner — keeps pipeline.py self-contained."""
+    base = {f.name: getattr(config, f.name) for f in _config_fields(config)}
+    base.update(overrides)
+    return Config(**base)
+
+
+def _config_fields(config: Config):
+    """Return the Config dataclass fields (light indirection for testability)."""
+    from dataclasses import fields
+    return fields(config)
+
+
 def _write_edl_json(edl: EDL, path: Path) -> None:
     """Serialise an EDL to JSON (small helper kept here to avoid circular imports)."""
     import json

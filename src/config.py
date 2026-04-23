@@ -86,6 +86,8 @@ class Config:
     must_include: list[str] = field(default_factory=list)   # must-include segments
     beat_aligned: bool = True     # when music_track is set, use beat-aligned sequencer
     project_name: str = "skygrid_project"
+    outputs: list[dict] = field(default_factory=list)  # multi-output spec
+    client_name: str = ""         # used in filename when provided
 
 
 def load_config(path: Path | None = None) -> Config:
@@ -184,6 +186,8 @@ def load_config(path: Path | None = None) -> Config:
         must_include=list(edit_cfg.get("must_include", [])),
         beat_aligned=bool(edit_cfg.get("beat_aligned", True)),
         project_name=str(project_cfg.get("name", "skygrid_project")),
+        outputs=list(raw.get("outputs", [])),
+        client_name=str(branding_cfg.get("client_name", "")),
     )
 
 
@@ -249,4 +253,6 @@ def resolve_output_profile(
         must_include=config.must_include,
         beat_aligned=config.beat_aligned,
         project_name=config.project_name,
+        outputs=config.outputs,
+        client_name=config.client_name,
     )

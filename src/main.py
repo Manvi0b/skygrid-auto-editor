@@ -10,7 +10,7 @@ import click
 
 from src.config import Config, load_config, resolve_output_profile
 from src.models.output_profile import BUILTIN_OUTPUT_PROFILES
-from src.pipeline import analyze_only, run
+from src.pipeline import analyze_only, run, run_all
 
 _PROFILE_NAMES = list(BUILTIN_OUTPUT_PROFILES.keys())
 
@@ -216,6 +216,60 @@ def list_clips(
 # profiles — list available output profiles
 # ------------------------------------------------------------------
 
+@cli.command("edit-multi")
+@click.option("--input", "input_dir",
+              type=click.Path(exists=True, file_okay=False, path_type=Path),
+              default=None, help="Override input directory.")
+@click.option("--music", "music_track",
+              type=click.Path(exists=True, path_type=Path), default=None,
+              help="Music track for beat-aligned sequencing.")
+@click.option("--pacing", type=click.Choice(["slow", "medium", "fast", "cinematic", "energetic"]),
+              default=None)
+@click.option("--mood", type=click.Choice(["luxury", "energetic", "moody", "bright", "dramatic", "neutral"]),
+              default=None)
+@click.option("--project-name", "project_name", type=str, default=None,
+              help="Override project_name (used in filenames).")
+@click.option("--client-name", "client_name", type=str, default=None,
+              help="Override client_name (used in filenames).")
+@click.pass_context
+def edit_multi(
+    ctx: click.Context,
+    input_dir: Path | None,
+    music_track: Path | None,
+    pacing: str | None,
+    mood: str | None,
+    project_name: str | None,
+    client_name: str | None,
+) -> None:
+    """Render every entry in config.outputs from a single analysis pass."""
+    config: Config = ctx.obj["config"]
+    if input_dir:
+        config = _override_input(config, input_dir)
+    config = _apply_edit_overrides(
+        config, music_track=music_track, target_length=None,
+        pacing=pacing, mood=mood, no_beats=False,
+    )
+    if project_name:
+        config = _clone_with(config, project_name=project_name)
+    if client_name:
+        config = _clone_with(config, client_name=client_name)
+
+    if not config.outputs:
+        raise click.UsageError(
+            "config.outputs is empty — add an 'outputs:' list to config.yaml "
+            "(e.g. [{length: 60, aspect: 16:9}, {length: 30, aspect: 9:16}])"
+        )
+
+    click.echo(f"Rendering {len(config.outputs)} output(s) for project '{config.project_name}'")
+    for i, spec in enumerate(config.outputs, 1):
+        click.echo(f"  {i}. {spec}")
+
+    results = run_all(config)
+    click.echo("\nRendered files:")
+    for p in results:
+        click.echo(f"  {p}")
+
+
 @cli.command("profiles")
 def list_profiles() -> None:
     """Show all available output profiles."""
@@ -321,6 +375,8 @@ def _override_input(config: Config, input_dir: Path) -> Config:
         must_include=config.must_include,
         beat_aligned=config.beat_aligned,
         project_name=config.project_name,
+        outputs=config.outputs,
+        client_name=config.client_name,
     )
 
 
