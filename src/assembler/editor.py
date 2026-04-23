@@ -152,6 +152,9 @@ def _adapt_aspect_ratio(
             return _blur_bars(vc, tgt_w, tgt_h)
         case "letterbox":
             return _letterbox(vc, tgt_w, tgt_h)
+        case "smart_crop":
+            from src.reframe.smart import smart_reframe
+            return smart_reframe(vc, tgt_w, tgt_h)
         case _:
             logger.warning("Unknown aspect_ratio_mode '%s' — using letterbox", mode)
             return _letterbox(vc, tgt_w, tgt_h)

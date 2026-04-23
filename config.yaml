@@ -118,6 +118,9 @@ branding:
   client_name: ""
 
 # How to handle clips whose aspect ratio doesn't match the output profile.
-# Options: "crop" (centre-crop to fill), "blur_bars" (blurred background fill),
-#          "letterbox" (black bars).
+# Options: "crop"        — centre-crop to fill
+#          "blur_bars"   — blurred background fill (Instagram-style)
+#          "letterbox"   — black bars
+#          "smart_crop"  — subject-tracked crop (YOLO if available, saliency
+#                          fallback) — best for 16:9 → 9:16
 aspect_ratio_mode: blur_bars
