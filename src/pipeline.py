@@ -22,6 +22,7 @@ from src.models.edl import EDL
 from src.models.output_profile import OutputProfile
 from src.branding.cards import apply_branding
 from src.export.timeline_export import export_all as export_nle_files
+from src.preprocess import preprocess_clips
 from src.qc.preview import generate_contact_sheet
 from src.sequencer.beat_sequencer import build_edl, build_edl_from_segments
 from src.ingest.segments import extract_segments, write_segments_manifest
@@ -60,6 +61,12 @@ def run(
         write_project_manifest(accepted, config.output_dir, config.project_name)
     except Exception:
         logger.exception("Failed to write project manifest — continuing")
+
+    # 4b. Per-clip preprocessing — stabilization + horizon auto-level (v0.12.0).
+    try:
+        accepted = preprocess_clips(accepted, config)
+    except Exception:
+        logger.exception("Preprocessing failed — continuing with originals")
 
     # Decide: beat-aligned (music-driven) or classic concat assembly.
     use_beats = (
@@ -194,6 +201,11 @@ def run_all(
         write_project_manifest(accepted, config.output_dir, config.project_name)
     except Exception:
         logger.exception("Failed to write project manifest — continuing")
+
+    try:
+        accepted = preprocess_clips(accepted, config)
+    except Exception:
+        logger.exception("Preprocessing failed — continuing with originals")
 
     # Pre-compute segments + music map once; they're profile-independent.
     segments = extract_segments(accepted)

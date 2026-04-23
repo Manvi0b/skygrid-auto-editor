@@ -21,6 +21,20 @@ paths:
   output: "./output"
   plugins: "./plugins"
 
+# ---------------------------------------------------------------------------
+# v0.12.0 — per-clip preprocessing.
+# Runs between analysis and assembly, swaps Clip.path to cached outputs in
+# `<output_dir>/_preproc/` so repeat runs skip the work.
+# ---------------------------------------------------------------------------
+preprocessing:
+  stabilize: false         # ffmpeg vidstab (two-pass) if built in, else deshake
+  level_horizon: false     # detect dominant horizon line and counter-rotate
+  max_tilt_deg: 6.0        # clamp extreme detected tilts
+  min_tilt_deg: 0.5        # below this, skip rotation (noise floor)
+  overscale: 1.08          # pre-scale before rotation to hide black corners
+  deshake_rx: 32           # deshake search radius X (pixels)
+  deshake_ry: 32           # deshake search radius Y (pixels)
+
 pipeline:
   max_duration: 120          # Maximum output duration in seconds
   min_clip_score: 30         # Minimum composite score to include a clip (0–100)

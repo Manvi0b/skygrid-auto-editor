@@ -104,6 +104,9 @@ class Config:
     # Shape documented in config.yaml under `branding:`.
     branding: dict = field(default_factory=dict)
 
+    # --- v0.12.0 — per-clip preprocessing (stabilization + horizon level) ---
+    preprocessing: dict = field(default_factory=dict)
+
 
 def load_config(path: Path | None = None) -> Config:
     """Load and validate a YAML configuration file.
@@ -212,6 +215,7 @@ def load_config(path: Path | None = None) -> Config:
         duck_attack=float(audio.get("duck_attack", 20.0)),
         duck_release=float(audio.get("duck_release", 250.0)),
         branding=dict(branding_cfg),
+        preprocessing=dict(raw.get("preprocessing", {})),
     )
 
 
@@ -288,4 +292,5 @@ def resolve_output_profile(
         duck_attack=config.duck_attack,
         duck_release=config.duck_release,
         branding=config.branding,
+        preprocessing=config.preprocessing,
     )
