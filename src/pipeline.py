@@ -20,6 +20,7 @@ from src.ingest.manifest import write_project_manifest
 from src.models.clip import Clip
 from src.models.edl import EDL
 from src.models.output_profile import OutputProfile
+from src.branding.cards import apply_branding
 from src.export.timeline_export import export_all as export_nle_files
 from src.qc.preview import generate_contact_sheet
 from src.sequencer.beat_sequencer import build_edl, build_edl_from_segments
@@ -128,6 +129,9 @@ def run(
     else:
         # 5. Assemble (legacy path).
         assembled_path = assemble(accepted, config, profile=target)
+
+    # 5b. Branding — title/outro cards + lower-third overlay (v0.11.0).
+    assembled_path = apply_branding(assembled_path, config, profile=target)
 
     # 6. Render.
     final_path = output_path or (config.output_dir / "final.mp4")
@@ -287,6 +291,7 @@ def _render_one(
     else:
         assembled_path = assemble(accepted, config, profile=target)
 
+    assembled_path = apply_branding(assembled_path, config, profile=target)
     return render(assembled_path, output_path, config, profile=target)
 
 

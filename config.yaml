@@ -130,6 +130,33 @@ outputs: []
 branding:
   client_name: ""
 
+  # v0.11.0 — title card, outro card, lower-third overlay.
+  # All three elements are independently optional.  Unset `text` fields
+  # fall back to project_name / client_name where sensible.
+  title_card:
+    enabled: false
+    text: ""                 # defaults to project.name
+    subtitle: ""              # defaults to branding.client_name
+    duration: 2.0
+    background: "black"
+    text_color: "white"
+    font_size: 0              # 0 = auto (scales with output height)
+  outro_card:
+    enabled: false
+    text: ""
+    duration: 2.0
+    background: "black"
+    text_color: "white"
+    font_size: 0
+  lower_third:
+    enabled: false
+    text: ""                 # defaults to branding.client_name
+    start: 1.0                # seconds after title card ends
+    duration: 3.0
+    text_color: "white"
+    background: "black@0.55"  # ffmpeg color spec, alpha supported
+    font_size: 0
+
 # How to handle clips whose aspect ratio doesn't match the output profile.
 # Options: "crop"        — centre-crop to fill
 #          "blur_bars"   — blurred background fill (Instagram-style)

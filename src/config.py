@@ -99,6 +99,11 @@ class Config:
     duck_attack: float = 20.0        # attack in ms
     duck_release: float = 250.0      # release in ms
 
+    # --- v0.11.0 — branding / title / outro / lower-third ---
+    # Stored as a dict to avoid ballooning Config with 20+ nested fields.
+    # Shape documented in config.yaml under `branding:`.
+    branding: dict = field(default_factory=dict)
+
 
 def load_config(path: Path | None = None) -> Config:
     """Load and validate a YAML configuration file.
@@ -206,6 +211,7 @@ def load_config(path: Path | None = None) -> Config:
         duck_ratio=float(audio.get("duck_ratio", 8.0)),
         duck_attack=float(audio.get("duck_attack", 20.0)),
         duck_release=float(audio.get("duck_release", 250.0)),
+        branding=dict(branding_cfg),
     )
 
 
@@ -281,4 +287,5 @@ def resolve_output_profile(
         duck_ratio=config.duck_ratio,
         duck_attack=config.duck_attack,
         duck_release=config.duck_release,
+        branding=config.branding,
     )
