@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from src.audio.music_sync import MusicMap, MusicSection
 from src.models.clip import Clip
 from src.models.edl import EDL, EDLEntry
+from src.models.segment import Segment
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,38 @@ class BeatSlot:
     def mid(self) -> float:
         """Midpoint time (seconds)."""
         return (self.start + self.end) / 2.0
+
+
+def build_edl_from_segments(
+    segments: list[Segment],
+    music_map: MusicMap,
+    target_duration: float,
+    pacing: str = "medium",
+    mood: str = "neutral",
+) -> EDL:
+    """Build a beat-aligned EDL from a pool of quality-gated segments.
+
+    Identical to :func:`build_edl` except each pool item carries its own
+    ``start``/``end`` inside the source file, so cuts use the *best
+    seconds* of a clip instead of the middle of the whole file.
+
+    Args:
+        segments: Ranked segment pool (highest composite first).
+        music_map: Music analysis result.
+        target_duration: Desired edit length in seconds.
+        pacing: Pacing label.
+        mood: Mood label.
+
+    Returns:
+        Populated EDL.
+    """
+    return build_edl(
+        clips=segments,  # type: ignore[arg-type]
+        music_map=music_map,
+        target_duration=target_duration,
+        pacing=pacing,
+        mood=mood,
+    )
 
 
 def build_edl(
@@ -273,11 +306,27 @@ def _pick_clip_for_slot(
     return max(pool, key=_score_for)
 
 
-def _choose_source_window(clip: Clip, needed: float) -> tuple[float, float]:
-    """Pick the best sub-range of the source clip for a slot of *needed* seconds."""
+def _choose_source_window(clip, needed: float) -> tuple[float, float]:
+    """Pick the best sub-range of the source for a slot of *needed* seconds.
+
+    Works for either a :class:`Clip` (full file, window picked from
+    middle) or a :class:`Segment` (pre-gated sub-range, stay inside
+    ``segment.start``–``segment.end``).
+    """
+    # Segment path: it already describes a quality-gated window on the source.
+    seg_start = getattr(clip, "start", None)
+    seg_end = getattr(clip, "end", None)
+    if isinstance(seg_start, (int, float)) and isinstance(seg_end, (int, float)):
+        available = float(seg_end - seg_start)
+        if available <= needed:
+            return (float(seg_start), float(seg_end))
+        # Centre the needed slice inside the segment.
+        mid = (float(seg_start) + float(seg_end)) / 2.0
+        return (mid - needed / 2.0, mid + needed / 2.0)
+
+    # Clip path: pick from the middle, skip ramp-in/out.
     if clip.duration <= needed:
         return (0.0, clip.duration)
-    # Prefer the middle — skip first/last 10 % which are often ramp-in/out.
     pad = clip.duration * 0.1
     usable_start = pad
     usable_end = clip.duration - pad

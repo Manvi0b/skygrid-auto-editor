@@ -21,7 +21,8 @@ from src.models.clip import Clip
 from src.models.edl import EDL
 from src.models.output_profile import OutputProfile
 from src.qc.preview import generate_contact_sheet
-from src.sequencer.beat_sequencer import build_edl
+from src.sequencer.beat_sequencer import build_edl, build_edl_from_segments
+from src.ingest.segments import extract_segments, write_segments_manifest
 
 logger = logging.getLogger(__name__)
 
@@ -70,13 +71,30 @@ def run(
         logger.info("Beat-aligned sequencing  target=%.1fs  pacing=%s  mood=%s",
                     target_len, config.pacing, config.mood)
         music_map = analyze_music(config.music_track)
-        edl = build_edl(
-            clips=accepted,
-            music_map=music_map,
-            target_duration=target_len,
-            pacing=config.pacing,
-            mood=config.mood,
-        )
+
+        # If the quality_windows analyzer ran, pull best-of segments out of each
+        # clip and sequence those instead of whole files.
+        segments = extract_segments(accepted)
+        if segments:
+            try:
+                write_segments_manifest(segments, config.output_dir)
+            except Exception:
+                logger.exception("Failed to write segments manifest — continuing")
+            edl = build_edl_from_segments(
+                segments=segments,
+                music_map=music_map,
+                target_duration=target_len,
+                pacing=config.pacing,
+                mood=config.mood,
+            )
+        else:
+            edl = build_edl(
+                clips=accepted,
+                music_map=music_map,
+                target_duration=target_len,
+                pacing=config.pacing,
+                mood=config.mood,
+            )
         # Persist EDL alongside the output.
         try:
             _write_edl_json(edl, config.output_dir / "edl.json")

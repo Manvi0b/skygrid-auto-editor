@@ -29,6 +29,7 @@ pipeline:
     - "shake_detector"
     - "scene_detector"
     - "audio_analyzer"
+    - "quality_windows"
 
 transitions:
   style: "crossfade"         # Options: "cut", "crossfade", "fade_black"
