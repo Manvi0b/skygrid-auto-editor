@@ -20,6 +20,7 @@ from src.ingest.manifest import write_project_manifest
 from src.models.clip import Clip
 from src.models.edl import EDL
 from src.models.output_profile import OutputProfile
+from src.export.timeline_export import export_all as export_nle_files
 from src.qc.preview import generate_contact_sheet
 from src.sequencer.beat_sequencer import build_edl, build_edl_from_segments
 from src.ingest.segments import extract_segments, write_segments_manifest
@@ -108,6 +109,20 @@ def run(
             generate_contact_sheet(edl, config.output_dir / "contact_sheet.png")
         except Exception:
             logger.exception("Contact-sheet generation failed — continuing")
+
+        # NLE handoff files (FCPXML + CMX EDL + OTIO if installed).
+        try:
+            export_nle_files(
+                edl,
+                config.output_dir,
+                basename="edit",
+                fps=target.fps,
+                width=target.width,
+                height=target.height,
+                project_name=config.project_name,
+            )
+        except Exception:
+            logger.exception("NLE export failed — continuing")
 
         assembled_path = assemble_from_edl(edl, config, profile=target)
     else:
@@ -255,6 +270,19 @@ def _render_one(
                 mood=config.mood,
             )
         logger.info("\n%s", edl.summary())
+        # Per-output NLE handoff files, named to match the rendered mp4.
+        try:
+            export_nle_files(
+                edl,
+                output_path.parent,
+                basename=output_path.stem,
+                fps=target.fps,
+                width=target.width,
+                height=target.height,
+                project_name=config.project_name,
+            )
+        except Exception:
+            logger.exception("NLE export failed — continuing")
         assembled_path = assemble_from_edl(edl, config, profile=target)
     else:
         assembled_path = assemble(accepted, config, profile=target)

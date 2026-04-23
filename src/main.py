@@ -270,6 +270,70 @@ def edit_multi(
         click.echo(f"  {p}")
 
 
+@cli.command("export")
+@click.option("--edl-file", "edl_file", type=click.Path(exists=True, path_type=Path),
+              default=None, help="Path to edl.json (default: <output_dir>/edl.json).")
+@click.option("--output-dir", "out_dir", type=click.Path(path_type=Path),
+              default=None, help="Where to write the FCPXML/EDL/OTIO files.")
+@click.option("--basename", type=str, default="edit",
+              help="Filename stem for the exports.")
+@click.pass_context
+def export_cmd(
+    ctx: click.Context,
+    edl_file: Path | None,
+    out_dir: Path | None,
+    basename: str,
+) -> None:
+    """Convert an existing edl.json to FCPXML + CMX EDL (+ OTIO if installed)."""
+    from src.export.timeline_export import export_all
+    from src.models.edl import EDL, EDLEntry
+    import json as _json
+
+    config: Config = ctx.obj["config"]
+    edl_path = edl_file or (config.output_dir / "edl.json")
+    if not edl_path.exists():
+        raise click.UsageError(f"No edl.json found at {edl_path} — run `edit` first.")
+
+    with open(edl_path) as fh:
+        data = _json.load(fh)
+
+    entries = [
+        EDLEntry(
+            source_path=Path(e["source_path"]),
+            source_in=float(e["source_in"]),
+            source_out=float(e["source_out"]),
+            timeline_in=float(e["timeline_in"]),
+            duration=float(e["duration"]),
+            transition_in=e.get("transition_in", "cut"),
+            transition_out=e.get("transition_out", "cut"),
+            beat_aligned=bool(e.get("beat_aligned", False)),
+            shot_type=e.get("shot_type"),
+            movement=e.get("movement"),
+            score=float(e.get("score", 0.0)),
+            notes=e.get("notes", ""),
+        )
+        for e in data.get("entries", [])
+    ]
+    edl = EDL(
+        entries=entries,
+        target_duration=float(data.get("target_duration", 0.0)),
+        bpm=float(data.get("bpm", 0.0)),
+        mood=data.get("mood", "neutral"),
+        pacing=data.get("pacing", "medium"),
+    )
+
+    target_dir = out_dir or config.output_dir
+    target = config.output_profile
+    written = export_all(
+        edl, target_dir, basename=basename,
+        fps=target.fps, width=target.width, height=target.height,
+        project_name=config.project_name,
+    )
+    click.echo(f"Wrote {len(written)} timeline file(s):")
+    for p in written:
+        click.echo(f"  {p}")
+
+
 @cli.command("profiles")
 def list_profiles() -> None:
     """Show all available output profiles."""
