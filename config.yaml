@@ -42,6 +42,19 @@ audio:
   original_audio_volume: 0.7  # Volume of original clip audio (0.0–1.0)
   music_volume: 0.3           # Volume of background music (0.0–1.0)
 
+  # v0.10.0 — loudness normalisation (EBU R128 / ITU-R BS.1770).
+  # -14 LUFS is the YouTube / Spotify / Apple Music target.
+  target_lufs: -14.0
+  loudnorm_tp: -1.5           # true-peak ceiling (dBTP)
+  loudnorm_lra: 11.0          # loudness range target
+
+  # v0.10.0 — sidechain ducking: music drops when nat-sound is present.
+  duck_music: true
+  duck_threshold: 0.05        # linear amplitude that triggers ducking
+  duck_ratio: 8.0             # compression ratio while ducking
+  duck_attack: 20.0           # ms
+  duck_release: 250.0         # ms
+
 # ---------------------------------------------------------------------------
 # Source profiles — describe capture devices and their known characteristics.
 # Built-in profiles: dji_mini3pro, dji_mini4pro, dji_air3, dji_mavic3,

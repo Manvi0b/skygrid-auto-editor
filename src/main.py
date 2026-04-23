@@ -381,67 +381,14 @@ def _apply_edit_overrides(
 
 def _clone_with(config: Config, **overrides) -> Config:
     """Return a new Config with the given fields overridden."""
-    base = dict(
-        input_dir=config.input_dir, output_dir=config.output_dir,
-        plugins_dir=config.plugins_dir, max_duration=config.max_duration,
-        min_clip_score=config.min_clip_score, sort_by=config.sort_by,
-        enabled_analyzers=config.enabled_analyzers,
-        transition_style=config.transition_style,
-        transition_duration=config.transition_duration,
-        music_track=config.music_track, sync_to_beat=config.sync_to_beat,
-        original_audio_volume=config.original_audio_volume,
-        music_volume=config.music_volume, resolution=config.resolution,
-        fps=config.fps, codec=config.codec, bitrate=config.bitrate,
-        audio_codec=config.audio_codec, audio_bitrate=config.audio_bitrate,
-        preset=config.preset, output_profile=config.output_profile,
-        source_profiles=config.source_profiles,
-        aspect_ratio_mode=config.aspect_ratio_mode,
-        target_length=config.target_length, pacing=config.pacing,
-        mood=config.mood, property_type=config.property_type,
-        hero_clips=config.hero_clips, must_include=config.must_include,
-        beat_aligned=config.beat_aligned, project_name=config.project_name,
-    )
-    base.update(overrides)
-    return Config(**base)
+    from dataclasses import replace
+    return replace(config, **overrides)
 
 
 def _override_input(config: Config, input_dir: Path) -> Config:
     """Return a new Config with *input_dir* replaced."""
-    return Config(
-        input_dir=input_dir,
-        output_dir=config.output_dir,
-        plugins_dir=config.plugins_dir,
-        max_duration=config.max_duration,
-        min_clip_score=config.min_clip_score,
-        sort_by=config.sort_by,
-        enabled_analyzers=config.enabled_analyzers,
-        transition_style=config.transition_style,
-        transition_duration=config.transition_duration,
-        music_track=config.music_track,
-        sync_to_beat=config.sync_to_beat,
-        original_audio_volume=config.original_audio_volume,
-        music_volume=config.music_volume,
-        resolution=config.resolution,
-        fps=config.fps,
-        codec=config.codec,
-        bitrate=config.bitrate,
-        audio_codec=config.audio_codec,
-        audio_bitrate=config.audio_bitrate,
-        preset=config.preset,
-        output_profile=config.output_profile,
-        source_profiles=config.source_profiles,
-        aspect_ratio_mode=config.aspect_ratio_mode,
-        target_length=config.target_length,
-        pacing=config.pacing,
-        mood=config.mood,
-        property_type=config.property_type,
-        hero_clips=config.hero_clips,
-        must_include=config.must_include,
-        beat_aligned=config.beat_aligned,
-        project_name=config.project_name,
-        outputs=config.outputs,
-        client_name=config.client_name,
-    )
+    from dataclasses import replace
+    return replace(config, input_dir=input_dir)
 
 
 def _print_clip_detail(rank: int, clip: 'Clip') -> None:

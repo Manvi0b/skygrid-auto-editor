@@ -89,6 +89,16 @@ class Config:
     outputs: list[dict] = field(default_factory=list)  # multi-output spec
     client_name: str = ""         # used in filename when provided
 
+    # --- v0.10.0 — loudness + music ducking ---
+    target_lufs: float = -14.0       # integrated loudness target (YouTube ≈ -14)
+    loudnorm_tp: float = -1.5        # true-peak ceiling (dBTP)
+    loudnorm_lra: float = 11.0       # loudness range target
+    duck_music: bool = True          # sidechain-duck music under speech/nat-sound
+    duck_threshold: float = 0.05     # sidechaincompress threshold (linear)
+    duck_ratio: float = 8.0          # compression ratio while ducking
+    duck_attack: float = 20.0        # attack in ms
+    duck_release: float = 250.0      # release in ms
+
 
 def load_config(path: Path | None = None) -> Config:
     """Load and validate a YAML configuration file.
@@ -188,6 +198,14 @@ def load_config(path: Path | None = None) -> Config:
         project_name=str(project_cfg.get("name", "skygrid_project")),
         outputs=list(raw.get("outputs", [])),
         client_name=str(branding_cfg.get("client_name", "")),
+        target_lufs=float(audio.get("target_lufs", -14.0)),
+        loudnorm_tp=float(audio.get("loudnorm_tp", -1.5)),
+        loudnorm_lra=float(audio.get("loudnorm_lra", 11.0)),
+        duck_music=bool(audio.get("duck_music", True)),
+        duck_threshold=float(audio.get("duck_threshold", 0.05)),
+        duck_ratio=float(audio.get("duck_ratio", 8.0)),
+        duck_attack=float(audio.get("duck_attack", 20.0)),
+        duck_release=float(audio.get("duck_release", 250.0)),
     )
 
 
@@ -255,4 +273,12 @@ def resolve_output_profile(
         project_name=config.project_name,
         outputs=config.outputs,
         client_name=config.client_name,
+        target_lufs=config.target_lufs,
+        loudnorm_tp=config.loudnorm_tp,
+        loudnorm_lra=config.loudnorm_lra,
+        duck_music=config.duck_music,
+        duck_threshold=config.duck_threshold,
+        duck_ratio=config.duck_ratio,
+        duck_attack=config.duck_attack,
+        duck_release=config.duck_release,
     )

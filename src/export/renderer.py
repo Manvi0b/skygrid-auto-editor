@@ -60,28 +60,66 @@ def render(
 
     has_music = config.music_track is not None and config.music_track.exists()
 
+    # ------------------------------------------------------------------
+    # Audio graph (v0.10.0)
+    # ------------------------------------------------------------------
+    # Goals:
+    #   * Platform-correct integrated loudness via `loudnorm` (default -14
+    #     LUFS — YouTube / Spotify target).
+    #   * Sidechain-compress the music bus with the nat-sound bus as the
+    #     key, so music ducks when there's on-camera audio.
+    #
+    # Graph when music is present and ducking is on:
+    #   [0:a]volume=orig          → [a0]           (nat-sound bus)
+    #   [a0]asplit=2              → [a0m][a0k]     (mix + sidechain key)
+    #   [1:a]volume=music         → [a1]           (music bus)
+    #   [a1][a0k]sidechaincompress ... → [a1d]      (ducked music)
+    #   [a0m][a1d]amix=2          → [amix]
+    #   [amix]loudnorm=I=...      → [aout]
+    # ------------------------------------------------------------------
+    lufs_chain = (
+        f"loudnorm=I={config.target_lufs}:"
+        f"TP={config.loudnorm_tp}:"
+        f"LRA={config.loudnorm_lra}"
+    )
+
     if has_music:
         inputs.extend(["-i", str(config.music_track)])
         orig_vol = config.original_audio_volume
         music_vol = config.music_volume
-        filter_parts.append(
-            f"[0:a]volume={orig_vol}[a0];"
-            f"[1:a]volume={music_vol}[a1];"
-            f"[a0][a1]amix=inputs=2:duration=shortest[aout]"
-        )
+
+        if config.duck_music:
+            filter_parts.append(
+                f"[0:a]volume={orig_vol},asplit=2[a0m][a0k];"
+                f"[1:a]volume={music_vol}[a1];"
+                f"[a1][a0k]sidechaincompress="
+                f"threshold={config.duck_threshold}:"
+                f"ratio={config.duck_ratio}:"
+                f"attack={config.duck_attack}:"
+                f"release={config.duck_release}[a1d];"
+                f"[a0m][a1d]amix=inputs=2:duration=shortest:dropout_transition=0[amix];"
+                f"[amix]{lufs_chain}[aout]"
+            )
+        else:
+            filter_parts.append(
+                f"[0:a]volume={orig_vol}[a0];"
+                f"[1:a]volume={music_vol}[a1];"
+                f"[a0][a1]amix=inputs=2:duration=shortest[amix];"
+                f"[amix]{lufs_chain}[aout]"
+            )
         audio_map = ["-map", "0:v", "-map", "[aout]"]
     else:
-        audio_map = []
+        # No music — still LUFS-normalise the nat-sound so exports are
+        # consistent regardless of whether a track was supplied.
+        filter_parts.append(f"[0:a]{lufs_chain}[aout]")
+        audio_map = ["-map", "0:v", "-map", "[aout]"]
 
     cmd: list[str] = ["ffmpeg", *inputs]
 
-    if filter_parts:
-        full_filter = f"[0:v]{vf}[vout];{';'.join(filter_parts)}"
-        cmd.extend(["-filter_complex", full_filter])
-        cmd.extend(["-map", "[vout]"])
-        cmd.extend(audio_map)
-    else:
-        cmd.extend(["-vf", vf])
+    full_filter = f"[0:v]{vf}[vout];{';'.join(filter_parts)}"
+    cmd.extend(["-filter_complex", full_filter])
+    cmd.extend(["-map", "[vout]"])
+    cmd.extend(audio_map)
 
     cmd.extend([
         "-r", str(target.fps),
