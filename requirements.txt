@@ -6,3 +6,7 @@ click>=8.1.7
 pyyaml>=6.0.1
 numpy>=1.24.0
 soundfile>=0.12.1
+
+# Optional — enables shot classification via YOLOv8.
+# Falls back to an optical-flow-only classifier when missing.
+# ultralytics>=8.0.0

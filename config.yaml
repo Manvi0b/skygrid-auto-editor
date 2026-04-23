@@ -30,6 +30,7 @@ pipeline:
     - "scene_detector"
     - "audio_analyzer"
     - "quality_windows"
+    - "shot_classifier"
 
 transitions:
   style: "crossfade"         # Options: "cut", "crossfade", "fade_black"
